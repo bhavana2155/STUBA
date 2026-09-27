@@ -1,8 +1,12 @@
 import streamlit as st
 import sqlite3
-from datetime import date, timedelta
-from database import get_latest_student
+from datetime import date
+from database import get_latest_student, save_study_plan
 
+
+# --------------------------------------------------
+# PAGE CONFIG
+# --------------------------------------------------
 
 st.set_page_config(
     page_title="Study Planner - STUBA",
@@ -16,7 +20,6 @@ st.set_page_config(
 # --------------------------------------------------
 
 def get_connection():
-
     return sqlite3.connect(
         "stuba.db",
         check_same_thread=False
@@ -44,24 +47,18 @@ st.divider()
 
 student = get_latest_student()
 
-
 if student is None:
-
     st.warning(
         "⚠️ Please save your profile first."
     )
-
     st.stop()
 
 
 student_id = student[0]
-
 student_name = student[1]
 
 student_daily_hours = student[7] or 3
-
 learning_style = student[8] or "Simple Explanation"
-
 competitive_exam = student[9] or "None"
 
 
@@ -73,25 +70,19 @@ st.subheader("👤 Your Learning Preferences")
 
 col1, col2, col3 = st.columns(3)
 
-
 with col1:
-
     st.metric(
         "⏰ Daily Study Time",
         f"{student_daily_hours} hrs"
     )
 
-
 with col2:
-
     st.metric(
         "🧠 Learning Style",
         learning_style
     )
 
-
 with col3:
-
     st.metric(
         "🎯 Exam Goal",
         competitive_exam
@@ -109,17 +100,13 @@ st.subheader("🎯 Exam Details")
 
 col1, col2 = st.columns(2)
 
-
 with col1:
-
     exam_name = st.text_input(
         "Exam Name",
         placeholder="Example: Semester Exams"
     )
 
-
 with col2:
-
     exam_date = st.date_input(
         "Exam Date",
         min_value=date.today()
@@ -176,9 +163,7 @@ daily_hours = st.number_input(
 # --------------------------------------------------
 
 connection = get_connection()
-
 cursor = connection.cursor()
-
 
 cursor.execute(
     """
@@ -215,7 +200,6 @@ cursor.execute(
 
 quiz_performance = cursor.fetchall()
 
-
 connection.close()
 
 
@@ -224,7 +208,6 @@ connection.close()
 # --------------------------------------------------
 
 performance = {}
-
 
 for topic, score in quiz_performance:
 
@@ -267,17 +250,13 @@ selected_subjects = []
 for subject in subjects:
 
     subject_id = subject[0]
-
     subject_name = subject[1]
-
     difficulty = subject[3]
-
 
     selected = st.checkbox(
         f"{subject_name} — {difficulty}",
         key=f"planner_subject_{subject_id}"
     )
-
 
     if selected:
 
@@ -291,7 +270,6 @@ for subject in subjects:
 # --------------------------------------------------
 
 st.divider()
-
 
 if st.button(
     "✨ Generate Adaptive Study Plan",
@@ -313,14 +291,10 @@ if st.button(
     else:
 
         difficulty_weights = {
-
             "Easy": 1,
-
             "Medium": 2,
-
             "Hard": 3
         }
-
 
         plan_data = []
 
@@ -332,21 +306,14 @@ if st.button(
         for subject in selected_subjects:
 
             subject_name = subject[1]
-
             difficulty = subject[3]
-
             topics = subject[4] or ""
 
-
             topic_list = [
-
                 topic.strip()
-
                 for topic in topics.split(",")
-
                 if topic.strip()
             ]
-
 
             if not topic_list:
 
@@ -360,11 +327,9 @@ if st.button(
             # --------------------------------------------------
 
             weak_topics = []
-
             moderate_topics = []
-
             strong_topics = []
-
+            untested_topics = []
 
             for topic in topic_list:
 
@@ -372,11 +337,11 @@ if st.button(
                     topic.lower().strip()
                 )
 
-
                 if score is None:
 
-                    continue
+                    untested_topics.append(topic)
 
+                    continue
 
                 if score < 60:
 
@@ -405,25 +370,21 @@ if st.button(
 
                 priority = "High 🔴"
 
-
                 recommended_topic = min(
                     weak_topics,
                     key=lambda item: item[1]
                 )[0]
-
 
                 weakest_score = min(
                     weak_topics,
                     key=lambda item: item[1]
                 )[1]
 
-
                 reason = (
                     f"Quiz score is only "
                     f"{weakest_score:.0f}%. "
                     f"Revision is recommended."
                 )
-
 
                 base_weight = 5
 
@@ -432,12 +393,9 @@ if st.button(
 
                 priority = "Medium 🟡"
 
-
                 recommended_topic = moderate_topics[0][0]
 
-
                 score = moderate_topics[0][1]
-
 
                 reason = (
                     f"Quiz performance is "
@@ -445,23 +403,35 @@ if st.button(
                     f"More practice can improve mastery."
                 )
 
-
                 base_weight = 3
+
+
+            elif untested_topics:
+
+                priority = "Normal 🟢"
+
+                recommended_topic = untested_topics[0]
+
+                reason = (
+                    "This topic has not been tested yet."
+                )
+
+                base_weight = difficulty_weights.get(
+                    difficulty,
+                    1
+                )
 
 
             elif strong_topics:
 
                 priority = "Normal 🟢"
 
-
                 recommended_topic = strong_topics[0][0]
-
 
                 reason = (
                     "Good quiz performance. "
                     "Continue practicing or move to harder concepts."
                 )
-
 
                 base_weight = difficulty_weights.get(
                     difficulty,
@@ -473,14 +443,11 @@ if st.button(
 
                 priority = "Normal 🟢"
 
-
                 recommended_topic = topic_list[0]
-
 
                 reason = (
                     "This topic has not been tested yet."
                 )
-
 
                 base_weight = difficulty_weights.get(
                     difficulty,
@@ -543,12 +510,14 @@ if st.button(
                     "and timed practice."
                 )
 
+
             elif days_remaining <= 30:
 
                 exam_strategy = (
                     "Balance concept learning with "
                     "regular practice."
                 )
+
 
             else:
 
@@ -558,23 +527,22 @@ if st.button(
                 )
 
 
+            # --------------------------------------------------
+            # ADD TO PLAN
+            # --------------------------------------------------
+
             plan_data.append(
                 {
                     "subject": subject_name,
-
                     "difficulty": difficulty,
-
                     "topic": recommended_topic,
-
                     "priority": priority,
-
                     "reason": reason,
-
                     "method": method,
-
+                    "learning_method": method,
                     "exam_strategy": exam_strategy,
-
-                    "weight": base_weight
+                    "weight": base_weight,
+                    "plan_date": date.today()
                 }
             )
 
@@ -588,7 +556,6 @@ if st.button(
             for item in plan_data
         )
 
-
         total_minutes = (
             daily_hours * 60
         )
@@ -597,14 +564,10 @@ if st.button(
         for item in plan_data:
 
             allocated_minutes = round(
-
                 total_minutes
-
                 * item["weight"]
-
                 / total_weight
             )
-
 
             item["minutes"] = max(
                 15,
@@ -613,17 +576,38 @@ if st.button(
 
 
         # --------------------------------------------------
-        # SAVE PLAN
+        # SAVE PLAN TO DATABASE
+        # --------------------------------------------------
+
+        save_study_plan(
+            student_id=student_id,
+            exam_name=exam_name,
+            exam_date=exam_date,
+            plan_data=plan_data
+        )
+
+
+        # --------------------------------------------------
+        # SAVE PLAN TO SESSION
         # --------------------------------------------------
 
         st.session_state[
             "adaptive_plan"
         ] = plan_data
 
-
         st.session_state[
             "planner_exam_name"
         ] = exam_name
+
+        st.session_state[
+            "planner_exam_date"
+        ] = exam_date
+
+
+        st.success(
+            "✅ Your adaptive study plan has been "
+            "generated and saved!"
+        )
 
 
 # --------------------------------------------------
@@ -638,12 +622,10 @@ if "adaptive_plan" in st.session_state:
         "🧠 STUBA's Adaptive Study Plan"
     )
 
-
     st.success(
         f"Plan created for: "
         f"**{st.session_state['planner_exam_name']}**"
     )
-
 
     st.write(
         "STUBA analyzed your learning preference, "
@@ -669,9 +651,7 @@ if "adaptive_plan" in st.session_state:
                 f"{item['subject']}"
             )
 
-
             col1, col2 = st.columns(2)
-
 
             with col1:
 
@@ -708,7 +688,6 @@ if "adaptive_plan" in st.session_state:
                 f"🤖 Why: {item['reason']}"
             )
 
-
             st.caption(
                 f"🎯 Exam Strategy: "
                 f"{item['exam_strategy']}"
@@ -742,7 +721,6 @@ if "adaptive_plan" in st.session_state:
     st.divider()
 
     col1, col2, col3, col4 = st.columns(4)
-
 
     with col1:
 
